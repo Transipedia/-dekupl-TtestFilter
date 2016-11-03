@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
   char *counts_file, *conditions_file, *conditionA, *conditionB;
   //int k_length = 31;
   double pvalue_threshold = 0.05;
-  double log2fc_threshold = 1;
+  double log2fc_threshold = 0;
 
   int c;
   while ((c = getopt(argc, argv, "p:f:")) >= 0) {
