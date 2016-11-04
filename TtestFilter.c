@@ -333,9 +333,9 @@ int main(int argc, char *argv[])
   free(log_a);
   free(log_b);
 
-  fprintf(stderr, "Adjusting pvalues with bonferroni\n");
+  fprintf(stderr, "Adjusting pvalues with Benjamini–Hochberg\n");
 
-  // Correction of pvalues using Bonferoni
+  // Correction of pvalues using Benjamini–Hochberg
   double **pvalues_indicies = (double**)malloc(sizeof(double*) * kv_size(pvalues));
   for(size_t i = 0; i < kv_size(pvalues); i ++) {
     pvalues_indicies[i] = &pvalues.a[i];
