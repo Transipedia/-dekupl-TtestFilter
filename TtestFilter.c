@@ -266,12 +266,12 @@ int main(int argc, char *argv[])
     // Extract count for each conditions
     for(int i = 0; i < n1; i++) {
       int k = kv_A(conditionA_indicies, i);
-      a[i] =  kmer_test.counts[k];
+      a[i] =  kmer_test.counts[k] + 1;
       log_a[i] = log(kmer_test.counts[k] + 1);
     }
     for(int i = 0; i < n2; i++) {
       int k = kv_A(conditionB_indicies, i);
-      b[i]  = kmer_test.counts[k];
+      b[i]  = kmer_test.counts[k] + 1;
       log_b[i] = log(kmer_test.counts[k] + 1);
     }
 
