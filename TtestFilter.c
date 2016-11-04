@@ -7,8 +7,6 @@
 
 // C++
 #include <boost/math/distributions/students_t.hpp>
-#include <iostream>
-#include <iomanip>
 
 // klib (H.li)
 #include "kseq.h"
