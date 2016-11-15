@@ -4,9 +4,9 @@ HEADERS=kstring.h
 OBJECTS=$(HEADERS:.h=.o)
 LIBS=-lz -lm
 
-all:ttestFilter
+all:TtestFilter
 
-ttestFilter: TtestFilter.c $(HEADERS) $(OBJECTS)
+TtestFilter: TtestFilter.c $(HEADERS) $(OBJECTS)
 	$(CC) $(CFLAGS) $(OBJECTS) $< -o $@ $(LIBS)
 
 test: test.c
