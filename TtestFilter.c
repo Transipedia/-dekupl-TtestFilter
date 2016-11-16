@@ -253,7 +253,7 @@ int main(int argc, char *argv[])
 
     // load counts
     size_t j = 0;
-    while(ks_getuntil(ks, KS_SEP_SPACE, str, &dret) >= 0 && j < kmer_test.n) {
+    while(j < kmer_test.n && ks_getuntil(ks, KS_SEP_SPACE, str, &dret) >= 0) {
       kmer_test.counts[j] = (double) atoi(str->s) / normalization_factors[j];
       j++;
     }
