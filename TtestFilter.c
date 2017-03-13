@@ -38,7 +38,7 @@ void kmer_test_write(kmer_test_t *k, gzFile fp) {
 }
 
 int kmer_test_read(kmer_test_t *k, gzFile fp) {
-  size_t kmer_l;
+  size_t kmer_l=0;
   gzread(fp, &kmer_l,     sizeof(size_t));
   if(k->kmer)
     k->kmer = (char*)realloc(k->kmer, kmer_l + 1);
