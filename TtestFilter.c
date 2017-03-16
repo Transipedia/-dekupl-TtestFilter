@@ -40,6 +40,7 @@ void kmer_test_write(kmer_test_t *k, gzFile fp) {
 int kmer_test_read(kmer_test_t *k, gzFile fp) {
   size_t kmer_l=0;
   gzread(fp, &kmer_l,     sizeof(size_t));
+//  printf("%zu\n",kmer_l);
   if(k->kmer)
     k->kmer = (char*)realloc(k->kmer, kmer_l + 1);
   else
@@ -245,11 +246,18 @@ int main(int argc, char *argv[])
   tmp_fp = gzopen(TMP_FILENAME, "w");
   if(!tmp_fp) { fprintf(stderr, "Failed to open %s\n", TMP_FILENAME); exit(EXIT_FAILURE); }
 
+  //file with raw pvals
+  FILE *f = fopen("raw_pvals.txt", "w");
+  if (f == NULL){
+       printf("Error opening file!\n");
+       exit(1);
+   }
   // skip header line
   ks_getuntil(ks, KS_SEP_LINE, str, &dret);
   while(ks_getuntil(ks, KS_SEP_SPACE, str, &dret) >= 0) {
     char *kmer = ks_release(str);
     kmer_test.kmer = kmer;
+    
 
     // load counts
     size_t j = 0;
@@ -292,6 +300,7 @@ int main(int argc, char *argv[])
       df = 1;
       t_stat = -1;
       pvalue = 0.5;
+      
     } else {
       // Compute freedom degree
       df = sd1 * sd1 / n1 + sd2 * sd2 / n2;
@@ -310,7 +319,10 @@ int main(int argc, char *argv[])
       // Compute p-value
       boost::math::students_t dist(df);
       pvalue = 2 * cdf(complement(dist, fabs(t_stat)));
+      
     }
+    fprintf(f,"%s\t%f\n",kmer_test.kmer,pvalue);
+   
 
     // Compute log2FC
     kmer_test.log2FC = log2(kmer_test.meanB/kmer_test.meanA);
@@ -324,6 +336,7 @@ int main(int argc, char *argv[])
     // Free k-mer
     free(kmer);
   }
+  fclose(f);
   ks_destroy(ks);
   gzclose(fp);
   gzclose(tmp_fp);
@@ -373,7 +386,7 @@ int main(int argc, char *argv[])
     i++;
   }
   gzclose(tmp_fp);
-  remove(TMP_FILENAME);
+  //remove(TMP_FILENAME);
   kmer_test_destroy(&kmer_test);
 
   return 0;
