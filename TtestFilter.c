@@ -386,7 +386,7 @@ int main(int argc, char *argv[])
     i++;
   }
   gzclose(tmp_fp);
-  //remove(TMP_FILENAME);
+  remove(TMP_FILENAME);
   kmer_test_destroy(&kmer_test);
 
   return 0;
