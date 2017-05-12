@@ -73,7 +73,8 @@ double log2(double n) {
 
 double mean(double *counts, int n) {
   double sum = 0;
-  for (int i = 0; i < n; i++) {
+  int i = 0;
+  for (; i < n; i++) {
     sum += counts[i];
   }
   return sum / n;
@@ -81,7 +82,8 @@ double mean(double *counts, int n) {
 
 double sd(double *counts, int n, double mean) {
   double sum = 0;
-  for (int i = 0; i < n; i++) {
+  int i = 0;
+  for (; i < n; i++) {
     sum += pow(counts[i] - mean, 2);
   }
   return sqrt(sum / (n-1));
@@ -207,6 +209,7 @@ int main(int argc, char *argv[])
   double *log_b   = (double*)malloc(n2 * sizeof(double));
   kmer_test_t kmer_test;
   kvec_t(double) pvalues;
+  size_t j, i, line = 1;
 
   kmer_test.n      = kv_size(samples);
   kmer_test.counts = (double*)malloc(kv_size(samples) * sizeof(double));
@@ -217,14 +220,14 @@ int main(int argc, char *argv[])
   fprintf(stderr, "Condition B: %s\n", conditionB);
 
   fprintf(stderr, "Group A: ");
-  for(size_t j = 0; j < n1; j++) {
+  for(j = 0; j < n1; j++) {
     if(j > 0) fprintf(stderr, ", ");
     fprintf(stderr, "%s", kv_A(samples, kv_A(conditionA_indicies, j)));
   }
   fprintf(stderr, "\n");
 
   fprintf(stderr, "Group B: ");
-  for(size_t j = 0; j < n2; j++) {
+  for(j = 0; j < n2; j++) {
     if(j > 0) fprintf(stderr, ", ");
     fprintf(stderr, "%s", kv_A(samples, kv_A(conditionB_indicies, j)));
   }
@@ -234,7 +237,7 @@ int main(int argc, char *argv[])
 
   // Print output header line
   fprintf(stdout, "tag\tpvalue\tmeanA\tmeanB\tlog2FC");
-  for(size_t j = 0; j < kv_size(samples); j++) { fprintf(stdout, "\t%s", kv_A(samples, j));}
+  for(j = 0; j < kv_size(samples); j++) { fprintf(stdout, "\t%s", kv_A(samples, j));}
   fprintf(stdout, "\n");
 
   // Open counts file
@@ -257,27 +260,26 @@ int main(int argc, char *argv[])
   while(ks_getuntil(ks, KS_SEP_SPACE, str, &dret) >= 0) {
     char *kmer = ks_release(str);
     kmer_test.kmer = kmer;
-    
 
     // load counts
-    size_t j = 0;
+    j = 0;
     while(j < kmer_test.n && ks_getuntil(ks, KS_SEP_SPACE, str, &dret) >= 0) {
       kmer_test.counts[j] = (double) atoi(str->s) / normalization_factors[j];
       j++;
     }
 
     if (dret != '\n') {
-      fprintf(stderr, "inconsistent number of column\n");
+      fprintf(stderr, "inconsistent number of column (line %zu)\n", line);
       exit(EXIT_FAILURE);
     }
 
     // Extract count for each conditions
-    for(int i = 0; i < n1; i++) {
+    for(i = 0; i < n1; i++) {
       int k = kv_A(conditionA_indicies, i);
       a[i] =  kmer_test.counts[k] + 1;
       log_a[i] = log(kmer_test.counts[k] + 1);
     }
-    for(int i = 0; i < n2; i++) {
+    for(i = 0; i < n2; i++) {
       int k = kv_A(conditionB_indicies, i);
       b[i]  = kmer_test.counts[k] + 1;
       log_b[i] = log(kmer_test.counts[k] + 1);
@@ -300,7 +302,7 @@ int main(int argc, char *argv[])
       df = 1;
       t_stat = -1;
       pvalue = 0.5;
-      
+
     } else {
       // Compute freedom degree
       df = sd1 * sd1 / n1 + sd2 * sd2 / n2;
@@ -319,10 +321,9 @@ int main(int argc, char *argv[])
       // Compute p-value
       boost::math::students_t dist(df);
       pvalue = 2 * cdf(complement(dist, fabs(t_stat)));
-      
+
     }
     fprintf(f,"%s\t%f\n",kmer_test.kmer,pvalue);
-   
 
     // Compute log2FC
     kmer_test.log2FC = log2(kmer_test.meanB/kmer_test.meanA);
@@ -335,6 +336,7 @@ int main(int argc, char *argv[])
 
     // Free k-mer
     free(kmer);
+    line++;
   }
   fclose(f);
   ks_destroy(ks);
@@ -350,12 +352,12 @@ int main(int argc, char *argv[])
 
   // Correction of pvalues using Benjamini–Hochberg
   double **pvalues_indicies = (double**)malloc(sizeof(double*) * kv_size(pvalues));
-  for(size_t i = 0; i < kv_size(pvalues); i ++) {
+  for(i = 0; i < kv_size(pvalues); i ++) {
     pvalues_indicies[i] = &pvalues.a[i];
   }
   qsort(pvalues_indicies, kv_size(pvalues), sizeof(double*), cmp_reverse_double_pointers);
   double min = 1;
-  for(size_t i = 0; i < kv_size(pvalues); i++) {
+  for(i = 0; i < kv_size(pvalues); i++) {
     double new_pvalue = (double)kv_size(pvalues) / ((double)kv_size(pvalues) - (double)i) * (*pvalues_indicies[i]);
 
     if(new_pvalue > min) {
@@ -375,12 +377,12 @@ int main(int argc, char *argv[])
   // Open tmp file and print final ouput with corrected pvalues
   tmp_fp = gzopen(TMP_FILENAME, "r");
   if(!tmp_fp) { fprintf(stderr, "Failed to open %s\n", TMP_FILENAME); exit(EXIT_FAILURE); }
-  size_t i = 0;
+  i = 0;
   while(kmer_test_read(&kmer_test, tmp_fp)) {
     double pvalue = kv_A(pvalues, i);
     if(pvalue <= pvalue_threshold && fabs(kmer_test.log2FC) >= log2fc_threshold) {
       fprintf(stdout, "%s\t%f\t%f\t%f\t%f", kmer_test.kmer, pvalue, kmer_test.meanA, kmer_test.meanB, kmer_test.log2FC);
-      for(size_t j = 0; j < kmer_test.n; j++) { fprintf(stdout, "\t%.2f", kmer_test.counts[j]); }
+      for(j = 0; j < kmer_test.n; j++) { fprintf(stdout, "\t%.2f", kmer_test.counts[j]); }
       fprintf(stdout, "\n");
     }
     i++;
