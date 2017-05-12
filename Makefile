@@ -1,7 +1,7 @@
 CC=g++
 CFLAGS=-g -Wall -O2 -Wno-unused-function
 HEADERS=kstring.h
-OBJECTS=$(HEADERS:.h=.o)
+OBJECTS=
 LIBS=-lz -lm
 
 all:TtestFilter
