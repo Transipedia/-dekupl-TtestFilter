@@ -115,12 +115,14 @@ int main(int argc, char *argv[])
   //int k_length = 31;
   double pvalue_threshold = 0.05;
   double log2fc_threshold = 0;
+  char* raw_pval_file = NULL;
 
   int c;
-  while ((c = getopt(argc, argv, "p:f:")) >= 0) {
+  while ((c = getopt(argc, argv, "p:f:r:")) >= 0) {
     switch (c) {
       case 'p': pvalue_threshold = atof(optarg); break;
       case 'f': log2fc_threshold = atof(optarg); break;
+      case 'r': raw_pval_file    = optarg; break;
     }
   }
 
@@ -129,6 +131,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Usage:   ttestFilter [options] <counts.tsv> <conditions.tsv> <conditionA> <conditionB>\n\n");
 		fprintf(stderr, "Options: -p FLOAT  max pvalue [%.2f]\n", pvalue_threshold);
     fprintf(stderr, "         -f FLOAT  min log2 fold change (absolute) [%.2f]\n", log2fc_threshold);
+    fprintf(stderr, "         -r STR    file were raw pvalues will be printed\n");
 		fprintf(stderr, "\n");
 		return 1;
 	}
@@ -138,7 +141,7 @@ int main(int argc, char *argv[])
   conditionA      = argv[optind++];
   conditionB      = argv[optind++];
 
-  gzFile fp, tmp_fp;
+  gzFile fp, tmp_fp, pval_fp;
 	kstream_t *ks;
 	kstring_t *str;
   kvec_t(char*) samples;
@@ -250,11 +253,11 @@ int main(int argc, char *argv[])
   if(!tmp_fp) { fprintf(stderr, "Failed to open %s\n", TMP_FILENAME); exit(EXIT_FAILURE); }
 
   //file with raw pvals
-  FILE *f = fopen("raw_pvals.txt", "w");
-  if (f == NULL){
-       printf("Error opening file!\n");
-       exit(1);
-   }
+  if(raw_pval_file) {
+    pval_fp = gzopen(raw_pval_file, "w");
+    if(!pval_fp) { fprintf(stderr, "Failed to open %s\n", raw_pval_file); exit(EXIT_FAILURE); }
+  }
+
   // skip header line
   ks_getuntil(ks, KS_SEP_LINE, str, &dret);
   while(ks_getuntil(ks, KS_SEP_SPACE, str, &dret) >= 0) {
@@ -323,7 +326,11 @@ int main(int argc, char *argv[])
       pvalue = 2 * cdf(complement(dist, fabs(t_stat)));
 
     }
-    fprintf(f,"%s\t%f\n",kmer_test.kmer,pvalue);
+    if(raw_pval_file) {
+      char buffer[100];
+      sprintf(buffer,"%s\t%f\n",kmer_test.kmer,pvalue);
+      gzwrite(pval_fp, &buffer, strlen(buffer));
+    }
 
     // Compute log2FC
     kmer_test.log2FC = log2(kmer_test.meanB/kmer_test.meanA);
@@ -338,7 +345,8 @@ int main(int argc, char *argv[])
     free(kmer);
     line++;
   }
-  fclose(f);
+  if(raw_pval_file)
+    gzclose(pval_fp);
   ks_destroy(ks);
   gzclose(fp);
   gzclose(tmp_fp);
