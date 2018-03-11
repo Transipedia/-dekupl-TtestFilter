@@ -1,5 +1,6 @@
 #include <stdio.h>  //fprintf
 #include <stdlib.h> //free
+#include <iostream> //cout
 #include <zlib.h>
 #include <inttypes.h>
 #include <math.h> // pow()
@@ -7,6 +8,8 @@
 
 // C++
 #include <boost/math/distributions/students_t.hpp>
+#include <boost/math/distributions/chi_squared.hpp>
+#include <boost/math/distributions/poisson.hpp>
 
 // klib (H.li)
 #include "kseq.h"
@@ -22,7 +25,7 @@ typedef struct {
   char *kmer;
   size_t n;
   double *counts;
-  double log2FC, meanA, meanB;
+  double log2FC, meanA, meanB, sumA, sumB;
 } kmer_test_t;
 
 void kmer_test_write(kmer_test_t *k, gzFile fp) {
@@ -71,13 +74,18 @@ double log2(double n) {
   return log(n) / log(2);
 }
 
-double mean(double *counts, int n) {
+double sum(double *counts, int n) {
   double sum = 0;
   int i = 0;
   for (; i < n; i++) {
     sum += counts[i];
   }
-  return sum / n;
+  return sum;
+}
+
+
+double mean(double *counts, int n) {
+  return sum(counts,n) / n;
 }
 
 double sd(double *counts, int n, double mean) {
@@ -109,6 +117,68 @@ double dmin(double a, double b) {
   }
 }
 
+double compute_t_test(double m1, double m2, int n1, int n2, double sd1, double sd2)
+{
+    // Compute freedom degrees t-stat and pvalue
+    double df, t_stat, pvalue;
+
+    if(sd1 == 0 && sd2 == 0) {
+        df = 1;
+        t_stat = -1;
+        pvalue = 0.5;
+
+    } else {
+        // Compute freedom degree
+        df = sd1 * sd1 / n1 + sd2 * sd2 / n2;
+        df *= df;
+        double t1 = sd1 * sd1 / n1;
+        t1 *= t1;
+        t1 /=  (n1 - 1);
+        double t2 = sd2 * sd2 / n2;
+        t2 *= t2;
+        t2 /= (n2 - 1);
+        df /= (t1 + t2);
+
+        // Compute t-statistic:
+        t_stat = (m1 - m2) / sqrt(sd1 * sd1 / n1 + sd2 * sd2 / n2);
+
+        // Compute p-value
+        boost::math::students_t dist(df);
+        pvalue = 2 * cdf(complement(dist, fabs(t_stat)));
+    }
+    return pvalue;
+}
+
+double logpoisson(double lambda, double k)
+{
+    boost::math::poisson_distribution <double> dist(lambda);
+    return boost::math::log1p(pdf(dist,k)-1);
+    
+}
+
+
+/* Poisson model
+ * similar to HAWK
+ * https://www.biorxiv.org/content/biorxiv/early/2017/05/23/141267.full.pdf
+ * K1 and K2 are sums of counts of a kmer between conditions
+ * N1 and N2 are total kmer count sums between conditions
+ * both as per HAWK notations
+ */
+double compute_poisson_likelihood_ratio(double K1, double K2, int64_t N1, int64_t N2)
+{
+    double t_stat = 0;
+    double ll1 = logpoisson(K1, K1) + logpoisson(K2, K2);
+    double theta = (K1 + K2) / (N1 + N2); // TODO this ratio should be related to normalization factors, check it sometimes
+    double ll2 = logpoisson(theta * N1, K1) + logpoisson(theta * N2, K2);
+    double llr = ll1 - ll2;
+    t_stat = 2* llr;
+    int df=1;
+    boost::math::chi_squared dist(df);
+    double pvalue = 1.0-cdf(dist, t_stat);
+    return pvalue;
+}
+
+
 int main(int argc, char *argv[])
 {
   char *counts_file, *conditions_file, *conditionA, *conditionB;
@@ -116,13 +186,15 @@ int main(int argc, char *argv[])
   double pvalue_threshold = 0.05;
   double log2fc_threshold = 0;
   char* raw_pval_file = NULL;
+  bool use_t_test = true;
 
   int c;
-  while ((c = getopt(argc, argv, "p:f:r:")) >= 0) {
+  while ((c = getopt(argc, argv, "p:f:r:l")) >= 0) {
     switch (c) {
       case 'p': pvalue_threshold = atof(optarg); break;
       case 'f': log2fc_threshold = atof(optarg); break;
       case 'r': raw_pval_file    = optarg; break;
+      case 'l': use_t_test       = false; break;
     }
   }
 
@@ -132,6 +204,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Options: -p FLOAT  max pvalue [%.2f]\n", pvalue_threshold);
     fprintf(stderr, "         -f FLOAT  min log2 fold change (absolute) [%.2f]\n", log2fc_threshold);
     fprintf(stderr, "         -r STR    file were raw pvalues will be printed\n");
+    fprintf(stderr, "         -l        disregard the program name, do a Poisson likelihood ratio (HAWK model)\n");
 		fprintf(stderr, "\n");
 		return 1;
 	}
@@ -141,7 +214,7 @@ int main(int argc, char *argv[])
   conditionA      = argv[optind++];
   conditionB      = argv[optind++];
 
-  gzFile fp, tmp_fp, pval_fp;
+  gzFile fp, tmp_fp, pval_fp = NULL;
 	kstream_t *ks;
 	kstring_t *str;
   kvec_t(char*) samples;
@@ -258,6 +331,37 @@ int main(int argc, char *argv[])
     if(!pval_fp) { fprintf(stderr, "Failed to open %s\n", raw_pval_file); exit(EXIT_FAILURE); }
   }
 
+  // do a first pass over all counts to get total kmer counts
+  uint64_t N1=0, N2=0; // total kmer counts as per Hawk notation
+  ks_getuntil(ks, KS_SEP_LINE, str, &dret);
+  while(ks_getuntil(ks, KS_SEP_SPACE, str, &dret) >= 0) {
+    char *kmer = ks_release(str);
+    kmer_test.kmer = kmer;
+
+    // load counts
+    j = 0;
+    while(j < kmer_test.n && ks_getuntil(ks, KS_SEP_SPACE, str, &dret) >= 0) {
+      kmer_test.counts[j] = (double) atoi(str->s);
+      j++;
+    }
+
+    for(i = 0; i < n1; i++) {
+      int k = kv_A(conditionA_indicies, i);
+      N1 += kmer_test.counts[k];
+    }
+    for(i = 0; i < n2; i++) {
+      int k = kv_A(conditionB_indicies, i);
+      N2 += kmer_test.counts[k] ;
+    }
+  }
+
+  // ks_rewind(ks);  // not enough
+  // rewind counts file
+  ks_destroy(ks);
+  gzclose(fp); 
+  fp = gzopen(counts_file, "r");
+  ks = ks_init(fp);
+  
   // skip header line
   ks_getuntil(ks, KS_SEP_LINE, str, &dret);
   while(ks_getuntil(ks, KS_SEP_SPACE, str, &dret) >= 0) {
@@ -267,7 +371,9 @@ int main(int argc, char *argv[])
     // load counts
     j = 0;
     while(j < kmer_test.n && ks_getuntil(ks, KS_SEP_SPACE, str, &dret) >= 0) {
-      kmer_test.counts[j] = (double) atoi(str->s) / normalization_factors[j];
+      kmer_test.counts[j] = (double) atoi(str->s); 
+      if (use_t_test)
+        kmer_test.counts[j] /= normalization_factors[j]; 
       j++;
     }
 
@@ -279,7 +385,7 @@ int main(int argc, char *argv[])
     // Extract count for each conditions
     for(i = 0; i < n1; i++) {
       int k = kv_A(conditionA_indicies, i);
-      a[i] =  kmer_test.counts[k] + 1;
+      a[i] =  kmer_test.counts[k] + 1; // FIXME that +1 fix isn't totally satisfactory, it artifically increases the counts (rayan)
       log_a[i] = log(kmer_test.counts[k] + 1);
     }
     for(i = 0; i < n2; i++) {
@@ -298,34 +404,20 @@ int main(int argc, char *argv[])
     // Compute log standard deviation
     double sd1 = sd(log_a, n1, m1), sd2 = sd(log_b, n2, m2);
 
-    // Compute freedom degrees t-stat and pvalue
-    double df, t_stat, pvalue;
-
-    if(sd1 == 0 && sd2 == 0) {
-      df = 1;
-      t_stat = -1;
-      pvalue = 0.5;
-
-    } else {
-      // Compute freedom degree
-      df = sd1 * sd1 / n1 + sd2 * sd2 / n2;
-      df *= df;
-      double t1 = sd1 * sd1 / n1;
-      t1 *= t1;
-      t1 /=  (n1 - 1);
-      double t2 = sd2 * sd2 / n2;
-      t2 *= t2;
-      t2 /= (n2 - 1);
-      df /= (t1 + t2);
-
-      // Compute t-statistic:
-      t_stat = (m1 - m2) / sqrt(sd1 * sd1 / n1 + sd2 * sd2 / n2);
-
-      // Compute p-value
-      boost::math::students_t dist(df);
-      pvalue = 2 * cdf(complement(dist, fabs(t_stat)));
-
+    // Compute pvalues (a big chunk of computation is being done inside those functions)
+    double pvalue;
+    if (use_t_test)
+    {
+        pvalue = compute_t_test(m1,m2,n1,n2,sd1,sd2);
     }
+    else
+    {   // poisson
+        kmer_test.sumA = mean(a, n1);
+        kmer_test.sumB = mean(b, n2);
+        pvalue = compute_poisson_likelihood_ratio(kmer_test.sumA, kmer_test.sumB, N1, N2);
+        std::cout << "pval " << pvalue << std::endl;
+    }
+
     if(raw_pval_file) {
       char buffer[100];
       sprintf(buffer,"%s\t%f\n",kmer_test.kmer,pvalue);
@@ -388,6 +480,7 @@ int main(int argc, char *argv[])
   i = 0;
   while(kmer_test_read(&kmer_test, tmp_fp)) {
     double pvalue = kv_A(pvalues, i);
+    //std::cout << "pvalue: "<< pvalue << " log2FC: " << kmer_test.log2FC << std::endl;
     if(pvalue <= pvalue_threshold && fabs(kmer_test.log2FC) >= log2fc_threshold) {
       fprintf(stdout, "%s\t%f\t%f\t%f\t%f", kmer_test.kmer, pvalue, kmer_test.meanA, kmer_test.meanB, kmer_test.log2FC);
       for(j = 0; j < kmer_test.n; j++) { fprintf(stdout, "\t%.2f", kmer_test.counts[j]); }
