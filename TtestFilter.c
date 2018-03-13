@@ -415,7 +415,6 @@ int main(int argc, char *argv[])
         kmer_test.sumA = mean(a, n1);
         kmer_test.sumB = mean(b, n2);
         pvalue = compute_poisson_likelihood_ratio(kmer_test.sumA, kmer_test.sumB, N1, N2);
-        std::cout << "pval " << pvalue << std::endl;
     }
 
     if(raw_pval_file) {
