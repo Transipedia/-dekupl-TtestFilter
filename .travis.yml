@@ -10,4 +10,4 @@ script: make
 addons:
   apt:
     packages:
-      - libboost-all-dev
+      - libboost-math-dev
