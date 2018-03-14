@@ -1,0 +1,13 @@
+language: c
+
+matrix:
+  include:
+    - compiler: gcc
+      os: linux
+
+script: make
+
+addons:
+  apt:
+    packages:
+      - libboost-math-dev
