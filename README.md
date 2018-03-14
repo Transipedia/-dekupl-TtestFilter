@@ -6,7 +6,22 @@ In order to identify k-mers having differential expression between two condition
 
 ## Installation
 
-1. Install dependencies: `apt-get install libbost-math-dev`
-2. Clone project: `git clone https://github.com/Transipedia/dekupl-TtestFilter`
-3. Build from sources: `make`
+1. Install dependencies:
+
+  ```
+  apt-get install libbost-math-dev
+  ```
+
+2. Clone project:
+
+  ```
+  git clone https://github.com/Transipedia/dekupl-TtestFilter
+  ```
+
+3. Build from source:
+
+  ```
+  cd dekupl-TtestFilter && make
+  ```
+
 4. Move `TtestFilter` binary somewhere acessible to your `$PATH`
