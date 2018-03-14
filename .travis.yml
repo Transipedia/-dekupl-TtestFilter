@@ -6,3 +6,8 @@ matrix:
       os: linux
 
 script: make
+
+addons:
+  apt:
+    packages:
+      - libboost-all-dev
