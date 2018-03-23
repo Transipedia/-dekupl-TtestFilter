@@ -153,9 +153,9 @@ double logpoisson(double lambda, double k)
 {
     boost::math::poisson_distribution <double> dist(lambda);
     double t = pdf(dist,k);
-    if (t <= 1) 
+    if (t <= 0) 
         {
-        fprintf(stderr,"t <= 1 result for log poisson %f %f\n",lambda,k);
+        fprintf(stderr,"t <= 0 result for log poisson %f %f\n",lambda,k);
         return 0.001; // FIXME not very well thought, but avoids problems down the line
     }
     return boost::math::log1p(t-1);
