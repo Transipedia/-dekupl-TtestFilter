@@ -152,7 +152,13 @@ double compute_t_test(double m1, double m2, int n1, int n2, double sd1, double s
 double logpoisson(double lambda, double k)
 {
     boost::math::poisson_distribution <double> dist(lambda);
-    return boost::math::log1p(pdf(dist,k)-1);
+    double t = pdf(dist,k);
+    if (t <= 1) 
+        {
+        fprintf(stderr,"t <= 1 result for log poisson %f %f\n",lambda,k);
+        return 0.001; // FIXME not very well thought, but avoids problems down the line
+    }
+    return boost::math::log1p(t-1);
     
 }
 
