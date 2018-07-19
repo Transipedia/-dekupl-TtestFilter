@@ -158,7 +158,7 @@ double logpoisson(double lambda, double k)
 //        fprintf(stderr,"t too close to 0 for log poisson lambda=%f k=%f t=%f\n",lambda,k,t);
         t = 0.00001; // maybe not very well thought, but avoids problems down the line
     }
-    std::cout << "log1p params " << t << " " << lambda << " " << k << std::endl;
+    //std::cerr << "log1p params " << t << " " << lambda << " " << k << std::endl;
     return boost::math::log1p(t-1);
     
 }
