@@ -152,12 +152,13 @@ double compute_t_test(double m1, double m2, int n1, int n2, double sd1, double s
 double logpoisson(double lambda, double k)
 {
     boost::math::poisson_distribution <double> dist(lambda);
-    double t = pdf(dist,k);
-    if (t <= 0) 
+    double t = pdf(dist,(int)(k+0.5));
+    if (t <= 0.00001) 
         {
-        fprintf(stderr,"t <= 0 result for log poisson %f %f\n",lambda,k);
-        return 0.001; // FIXME not very well thought, but avoids problems down the line
+//        fprintf(stderr,"t too close to 0 for log poisson lambda=%f k=%f t=%f\n",lambda,k,t);
+        t = 0.00001; // maybe not very well thought, but avoids problems down the line
     }
+    std::cout << "log1p params " << t << " " << lambda << " " << k << std::endl;
     return boost::math::log1p(t-1);
     
 }
@@ -180,6 +181,12 @@ double compute_poisson_likelihood_ratio(double K1, double K2, int64_t N1, int64_
     t_stat = 2* llr;
     int df=1;
     boost::math::chi_squared dist(df);
+    if (t_stat <= 0) 
+    {
+        fprintf(stderr,"t_stat <= 0 result for likelihood ratio ll1=%f ll2=%f t_stat=%f\n",ll1,ll2,t_stat);
+        t_stat = 0.001; // FIXME not very well thought, but avoids problems down the line
+    }
+
     double pvalue = 1.0-cdf(dist, t_stat);
     return pvalue;
 }
@@ -315,7 +322,10 @@ int main(int argc, char *argv[])
   }
   fprintf(stderr, "\n");
 
-  fprintf(stderr, "Computing t-test for all k-mers\n");
+  if (use_t_test)
+    fprintf(stderr, "Computing t-test for all k-mers\n");
+  else
+    fprintf(stderr, "Computing Poisson test for all k-mers\n");
 
   // Print output header line
   fprintf(stdout, "tag\tpvalue\tmeanA\tmeanB\tlog2FC");
