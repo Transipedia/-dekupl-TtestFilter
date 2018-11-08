@@ -149,6 +149,43 @@ double compute_t_test(double m1, double m2, int n1, int n2, double sd1, double s
     return pvalue;
 }
 
+double compute_paired_t_test(double *log_a, double *log_b, int n)
+{
+  double *diff = (double*)malloc(n * sizeof(double));
+  int i = 0;
+
+  for(; i < n; i++) {
+    diff[i] = log_a[i] - log_b[i];
+  }
+
+  // Compute log means
+  double m = mean(diff, n);
+
+  // Compute log standard deviation
+  double sd1 = sd(diff, n, m);
+
+  // Compute freedom degrees t-stat and pvalue
+  double df, t_stat, pvalue;
+
+  if(sd1 == 0) {
+      df = 1;
+      t_stat = -1;
+      pvalue = 0.5;
+
+  } else {
+      // Compute freedom degree
+      df = n - 1;
+
+      // Compute t-statistic:
+      t_stat = m / (sd1 / sqrt(n));
+
+      // Compute p-value
+      boost::math::students_t dist(df);
+      pvalue = 2 * cdf(complement(dist, fabs(t_stat)));
+  }
+  return pvalue;
+}
+
 double logpoisson(double lambda, double k)
 {
     boost::math::poisson_distribution <double> dist(lambda);
@@ -199,15 +236,16 @@ int main(int argc, char *argv[])
   double pvalue_threshold = 0.05;
   double log2fc_threshold = 0;
   char* raw_pval_file = NULL;
-  bool use_t_test = true;
+  bool use_t_test = true, paired_t_test = false;
 
   int c;
-  while ((c = getopt(argc, argv, "p:f:r:l")) >= 0) {
+  while ((c = getopt(argc, argv, "p:f:r:ld")) >= 0) {
     switch (c) {
       case 'p': pvalue_threshold = atof(optarg); break;
       case 'f': log2fc_threshold = atof(optarg); break;
       case 'r': raw_pval_file    = optarg; break;
       case 'l': use_t_test       = false; break;
+      case 'd': paired_t_test    = true; break;
     }
   }
 
@@ -217,6 +255,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Options: -p FLOAT  max pvalue [%.2f]\n", pvalue_threshold);
     fprintf(stderr, "         -f FLOAT  min log2 fold change (absolute) [%.2f]\n", log2fc_threshold);
     fprintf(stderr, "         -r STR    file were raw pvalues will be printed\n");
+    fprintf(stderr, "         -d        paired (dependant) t-test\n");
     fprintf(stderr, "         -l        disregard the program name, do a Poisson likelihood ratio (HAWK model)\n");
 		fprintf(stderr, "\n");
 		return 1;
@@ -322,6 +361,10 @@ int main(int argc, char *argv[])
   }
   fprintf(stderr, "\n");
 
+  if (use_t_test && paired_t_test && n1 != n2) {
+    fprintf(stderr, "Error: Group size must be equal for paired t-test\n");  exit(EXIT_FAILURE); 
+  }
+    
   if (use_t_test)
     fprintf(stderr, "Computing t-test for all k-mers\n");
   else
@@ -423,8 +466,13 @@ int main(int argc, char *argv[])
     // Compute pvalues (a big chunk of computation is being done inside those functions)
     double pvalue;
     if (use_t_test)
-    {
+    { 
+      if (paired_t_test) {
+        pvalue = compute_paired_t_test(log_a,log_b,n1);
+      } else {
         pvalue = compute_t_test(m1,m2,n1,n2,sd1,sd2);
+      }
+        
     }
     else
     {   // poisson
